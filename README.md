@@ -4,6 +4,8 @@ A single-file dashboard that lists every repo from [razodin137](https://github.c
 
 **Live at:** <https://razodin137.github.io/2026-09-25-github-pages-homepage/>
 
+![repos-index screenshot](screenshot.png)
+
 ## Why
 
 GitHub's repo list is a mess to click through. This gives a fast triage flow instead:
