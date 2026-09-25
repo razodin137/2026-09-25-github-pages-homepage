@@ -579,7 +579,7 @@ function move(delta) {
   if (!cs.length) return;
   sel = Math.max(0, Math.min(sel + delta, cs.length - 1));
   markSelection();
-  cs[sel].scrollIntoView({ block: "nearest", behavior: "smooth" });
+  cs[sel].scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 function actOn(action) {
