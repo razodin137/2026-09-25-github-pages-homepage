@@ -17,9 +17,18 @@ GitHub's repo list is a mess to click through. This gives a fast triage flow ins
 
 ## Features
 
-- **Live data, zero maintenance** — queries the GitHub REST API client-side on every page load. New repos and new pages sites appear automatically. No build step, no server, no cron, nothing to babysit.
+- **Shows every repo, published or not** — it doubles as a checklist for projects that come in without their boxes checked.
+- **Per-repo checklist badges**:
+  - `PAGES ✓` / `NO PAGES ✗` — is GitHub Pages enabled?
+  - `HOMEPAGE ✓` / `NO HOMEPAGE ✗` — is the homepage field set on the repo?
+  - `README ✓` / `NO README ✗` — does the repo have a README? (checked via jsDelivr's data API, with a raw.githubusercontent.com fallback for repos jsDelivr can't enumerate — cached in localStorage for 7 days; first visit shows `README…` and fills in within a few seconds)
+- **Read the README inline** — every repo with a README gets a `README ▾` button (or press `M` with the card selected). The raw markdown drops straight into the card with a line/KB count, so you can eyeball README quality without leaving the page. No markdown renderer, no dependencies — just the text.
+- **Counts on the filter buttons** — `PAGES (53)` shows the *combined* total across both accounts at a glance, no mental math.
+- **Newest projects first** — cards are ordered by repo creation date, so new work lands at the top.
+- **Filters** — ALL / RAZODIN137 / MVVK-SPACE / PAGES / NO PAGES / NO HOMEPAGE / NO README. Use the "NO …" segments to see exactly what still needs publishing.
+- **Live data, zero maintenance** — queries the GitHub REST API client-side on every page load (with a 10-minute local cache to dodge the rate limit). New repos and new pages sites appear automatically. No build step, no server, no cron, nothing to babysit.
+- **Degrades instead of bricking** — if one owner's fetch fails (rate limit, API hiccup), the other owner still renders and the meta line says exactly what couldn't be fetched. If the API is fully rate-limited but a recent list is cached, the page renders from cache with a note.
 - **Site links from the repo's own `homepage` field** — falls back to `https://<owner>.github.io/<repo>/` when a repo has Pages enabled but no homepage set.
-- **Filters** — ALL / RAZODIN137 / MVVK-SPACE / HAS PAGES.
 - **Search** — live filter across names and descriptions.
 - **Inline preview** — embeds the published site in an iframe without leaving the page.
 - **Neobrutalist wireframe styling** — ink borders, hard shadows, Courier New, ruled-paper background.
@@ -32,6 +41,7 @@ GitHub's repo list is a mess to click through. This gives a fast triage flow ins
 | click | select any repo |
 | `O` | open the selected repo's **site** in a new tab |
 | `P` | toggle inline **preview** of the site |
+| `M` | expand the selected repo's **README** |
 | `R` | open the **repo** on GitHub |
 | `/` | focus the search box (`Esc` / `Enter` to leave) |
 
@@ -40,12 +50,19 @@ GitHub's repo list is a mess to click through. This gives a fast triage flow ins
 The whole thing is one static `index.html`. On load it fetches:
 
 ```
-GET https://api.github.com/users/<owner>/repos?per_page=100&sort=pushed
+GET https://api.github.com/users/<owner>/repos?per_page=100
 ```
 
 for each owner, then renders the cards. GitHub's API sends `access-control-allow-origin: *`, so direct browser calls work from any static host — no proxy needed.
 
-**Rate limits:** unauthenticated API calls are limited to 60/hour per IP, and this app uses 2 requests per visit (paginated if you ever exceed 100 repos). Fine for personal use; if you hit the limit, the page tells you when it resets.
+**Rate-limit strategy (learned the hard way):**
+
+- **Repo lists** come from `api.github.com` — 60 requests/hour unauthenticated, 2 used per visit. Three defenses keep you safe:
+  - **ETag conditional requests** — on repeat visits, `If-None-Match` returns `304 Not Modified`, which *doesn't count* against the limit.
+  - **…but only for 10 minutes** (`ETAG_TTL`). GitHub's list ETags do **not** change when you flip `has_pages` on a repo (enabling Pages doesn't touch `updated_at`), so an unconditional etag match would happily serve a stale cached list forever — the dashboard once swore only 19 repos had pages when the real combined total was 53. Past the TTL, the page refetches and pays 1 request per owner. Worst case with heavy reload-testing: ~12 requests/hour — still comfortably under the limit.
+  - **localStorage fallback** — the last successful list is cached (versioned + shape-checked so stale cache formats can't be misread); if the limit is ever hit, the page renders from cache with a "showing cached list" note, and per-owner failures don't brick the page.
+- **README checks and README contents never touch `api.github.com`** (one call per repo would exhaust the limit instantly). File listings come from [jsDelivr's data API](https://data.jsdelivr.com) — no rate limit, full CORS — and README content is fetched as raw markdown from `raw.githubusercontent.com` (also CDN-served, no API limit). Repos too big for jsDelivr to enumerate fall back to probing the raw endpoint directly. Results cached in localStorage for 7 days.
+- **No token, no secret needed anywhere.** A personal access token in client-side code would be readable by anyone visiting the page, and GitHub auto-revokes tokens it finds in public files — so instead, everything per-repo runs through endpoints that don't count against the 60/hr API limit.
 
 ## Adding more owners
 

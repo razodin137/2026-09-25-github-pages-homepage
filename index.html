@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>REPOS INDEX — razodin137 + mvvk-space</title>
+<meta name="robots" content="noindex, nofollow">
 <style>
   :root {
     --ink: #111;
@@ -95,6 +96,14 @@
     border: 2px solid var(--blue); color: var(--blue); padding: 1px 7px; background: #fff;
     transform: rotate(-2deg);
   }
+  .checks { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .6rem; }
+  .chk {
+    font-size: .62rem; font-weight: bold; letter-spacing: .1em;
+    border: 2px solid; padding: 2px 7px; background: #fff;
+  }
+  .chk.ok { color: var(--blue); border-color: var(--blue); }
+  .chk.miss { color: var(--accent); border-color: var(--accent); background: #ffe9e2; transform: rotate(-1.5deg); }
+  .chk.pending { color: #999; border-color: #999; }
 
   /* ---------- keyboard ---------- */
   .keys { display: flex; gap: 1.4rem; flex-wrap: wrap; font-size: .7rem; color: #555; margin: -1.2rem 0 1.8rem; padding: 0 .25rem; }
@@ -112,7 +121,19 @@
   .preview iframe { width: 100%; height: 420px; border: 2px dashed var(--ink); background: #fff; }
   .preview-note { font-size: .65rem; color: #777; margin-top: .3rem; }
 
+  .readme-view { margin-top: .9rem; display: none; }
+  .readme-view.open { display: block; }
+  .readme-head { font-size: .65rem; color: #555; margin-bottom: .35rem; letter-spacing: .03em; }
+  .readme-head a { color: var(--blue); }
+  .readme-head b { color: var(--ink); }
+  .readme-body {
+    border: 2px dashed var(--ink); background: #fff; padding: .8rem 1rem;
+    font-size: .72rem; line-height: 1.5; max-height: 420px; overflow: auto;
+    white-space: pre-wrap; word-break: break-word; font-family: inherit;
+  }
+
   .empty { border: 3px dashed var(--ink); padding: 2rem; text-align: center; font-size: .85rem; margin: 1.5rem 0; }
+
   footer { margin-top: 3rem; font-size: .68rem; color: #666; text-align: center; }
 </style>
 </head>
@@ -122,7 +143,7 @@
   <header>
     <div class="stamp">LIVE DATA</div>
     <h1>REPOS <span class="accent">INDEX</span></h1>
-    <div class="sub">every repo — razodin137 + mvvk-space — with its published pages site. fetched fresh from the GitHub API on every load. no babysitting.</div>
+    <div class="sub">every repo — razodin137 + mvvk-space — with its published pages site. fetched live from the GitHub API (cached 10 min to dodge the rate limit), readme checks via CDN. no babysitting.</div>
     <div id="meta">fetching…</div>
   </header>
 
@@ -131,72 +152,141 @@
     <button class="fbtn on" data-f="all">ALL</button>
     <button class="fbtn" data-f="razodin137">RAZODIN137</button>
     <button class="fbtn" data-f="mvvk-space">MVVK-SPACE</button>
-      <button class="fbtn" data-f="pages">HAS PAGES</button>
+    <button class="fbtn" data-f="pages">PAGES</button>
+    <button class="fbtn" data-f="nopages">NO PAGES</button>
+    <button class="fbtn" data-f="nohome">NO HOMEPAGE</button>
+    <button class="fbtn" data-f="noreadme">NO README</button>
   </div>
 
   <div class="keys">
     <span><span class="kbd">J</span>/<span class="kbd">K</span> or <span class="kbd">↓</span>/<span class="kbd">↑</span> or click to select</span>
     <span><span class="kbd">O</span> open site</span>
     <span><span class="kbd">P</span> preview</span>
+    <span><span class="kbd">M</span> readme</span>
     <span><span class="kbd">R</span> repo</span>
     <span><span class="kbd">/</span> search</span>
   </div>
 
   <div id="root"></div>
 
-  <footer>data: api.github.com — queried client-side, unauthenticated (60 req/hr, 2 used per visit)</footer>
+  <footer>data: api.github.com (repo lists) + data.jsdelivr.com &amp; raw.githubusercontent.com (readmes) — client-side, unauthenticated, no token needed</footer>
 </div>
 
 <script>
-const OWNERS = ["razodin137", "mvvk-space"];
-let ALL = [];
-
 const $ = s => document.querySelector(s);
 const metaEl = $("#meta");
 const rootEl = $("#root");
+
+const OWNERS = ["razodin137", "mvvk-space"];
+let ALL = [];
+
+/* ---------- README cache ----------
+   { "owner/repo": { v: 0|1, f: filename|null, b: branch|null, t: timestamp } }
+   v = has a readme, f = the actual filename (case as on GitHub), b = branch it
+   was found on. Kept 7 days. Key versioned (v2) so older cache shapes are
+   ignored instead of misread. */
+const RC_KEY = "repos-index:readme:v2";
+const RC_TTL = 7 * 24 * 3600 * 1000;
+let readmeCache = {};
+try { readmeCache = JSON.parse(localStorage.getItem(RC_KEY)) || {}; } catch (e) {}
+function saveReadmeCache() {
+  try { localStorage.setItem(RC_KEY, JSON.stringify(readmeCache)); } catch (e) {}
+}
+
+/* ---------- repo list cache ----------
+   { owner: { etag, savedAt, repos } } — the raw API list, so the site still
+   renders (with a note) if the API is slow, down, or rate-limited.
+
+   The etag only gets trusted while the cache is FRESH (ETAG_TTL). Why: GitHub's
+   list etags do NOT change when you flip has_pages on a repo (enabling Pages
+   doesn't bump updated_at), so an unconditional etag match happily served a
+   stale cached list forever — the dashboard swore only 19 repos had pages when
+   the real total was 53, until a push finally changed the etag. Within the TTL
+   a 304 is free and safe; past it we refetch and pay 1 request per owner. */
+const LC_KEY = "repos-index:lists:v2";
+const ETAG_TTL = 10 * 60 * 1000; // 10 minutes
+let listCache = {};
+try { listCache = JSON.parse(localStorage.getItem(LC_KEY)) || {}; } catch (e) {}
+function saveListCache(owner, etag, repos) {
+  listCache[owner] = { etag, savedAt: Date.now(), repos };
+  try { localStorage.setItem(LC_KEY, JSON.stringify(listCache)); } catch (e) {}
+}
+// only trust caches that actually hold raw API repo objects
+function isValidList(repos) {
+  return Array.isArray(repos) &&
+    repos.every(r => r && r.owner && r.owner.login && typeof r.has_pages === "boolean");
+}
 
 async function fetchRepos(owner) {
   const out = [];
   let page = 1;
   while (true) {
-    const res = await fetch(`https://api.github.com/users/${owner}/repos?per_page=100&sort=pushed&page=${page}`, { cache: "no-store" });
-    if (res.status === 403 || res.status === 429) {
-      const reset = new Date(Number(res.headers.get("x-ratelimit-reset")) * 1000);
-      throw new Error(`GitHub API rate limit hit. resets at ${reset.toLocaleTimeString()}. just wait a minute and reload.`);
+    const cached = listCache[owner];
+    const fresh = cached && cached.etag && isValidList(cached.repos) && Date.now() - cached.savedAt < ETAG_TTL;
+    const headers = {};
+    if (page === 1 && fresh) headers["If-None-Match"] = cached.etag;
+    const res = await fetch(`https://api.github.com/users/${owner}/repos?per_page=100&sort=pushed&page=${page}`, { cache: "no-store", headers });
+    if (res.status === 304 && fresh) {
+      // unchanged since last visit — doesn't count against the rate limit
+      return { repos: cached.repos, note: null };
     }
-    if (!res.ok) throw new Error(`API error ${res.status} for ${owner}`);
+    if (res.status === 403 || res.status === 429) {
+      if (cached && isValidList(cached.repos)) {
+        return { repos: cached.repos, note: `showing cached ${owner} list (saved ${new Date(cached.savedAt).toLocaleString()})` };
+      }
+      const reset = new Date(Number(res.headers.get("x-ratelimit-reset")) * 1000);
+      throw new Error(`${owner}: rate limit, resets ${reset.toLocaleTimeString()}`);
+    }
+    if (!res.ok) throw new Error(`${owner}: API error ${res.status}`);
+    const etag = res.headers.get("etag");
     const batch = await res.json();
     out.push(...batch);
+    if (page === 1 && etag && batch.length) saveListCache(owner, etag, out.slice());
     if (batch.length < 100) break;
     page++;
   }
-  return out;
+  return { repos: out, note: null };
 }
 
+/* one owner failing shouldn't brick the whole dashboard — render whoever
+   came back and say what's missing */
 async function load() {
-  try {
-    const lists = await Promise.all(OWNERS.map(fetchRepos));
-    ALL = lists.flatMap((repos, i) =>
-      repos.map(r => ({
-        owner: r.owner.login,
-        name: r.name,
-        desc: r.description,
-        homepage: r.homepage && r.homepage.trim() ? r.homepage.trim() : null,
-        hasPages: r.has_pages,
-        url: r.html_url,
-        lang: r.language,
-        pushed: r.pushed_at,
-        fork: r.fork
-      }))
-    );
-    metaEl.classList.remove("err");
-    metaEl.textContent = `${ALL.length} repos total — ${ALL.filter(r => r.hasPages).length} with pages — loaded ${new Date().toLocaleTimeString()}`;
-    render();
-  } catch (e) {
-    metaEl.classList.add("err");
-    metaEl.textContent = "ERROR: " + e.message;
-    rootEl.innerHTML = `<div class="empty">couldn't reach the GitHub API. try reloading.</div>`;
+  const results = await Promise.allSettled(OWNERS.map(fetchRepos));
+  const lists = [], notes = [], errors = [];
+  for (const res of results) {
+    if (res.status === "fulfilled") {
+      lists.push(res.value.repos);
+      if (res.value.note) notes.push(res.value.note);
+    } else {
+      errors.push(String(res.reason?.message || res.reason));
+    }
   }
+  if (!lists.length) {
+    metaEl.classList.add("err");
+    metaEl.textContent = "ERROR: " + errors.join(" · ");
+    rootEl.innerHTML = `<div class="empty">couldn't reach the GitHub API. try reloading.</div>`;
+    return;
+  }
+  ALL = lists.flat().map(r => ({
+    owner: r.owner.login,
+    name: r.name,
+    desc: r.description,
+    homepage: r.homepage && r.homepage.trim() ? r.homepage.trim() : null,
+    hasPages: r.has_pages,
+    url: r.html_url,
+    lang: r.language,
+    pushed: r.pushed_at,
+    created: r.created_at,
+    fork: r.fork
+  }));
+  metaEl.classList.toggle("err", errors.length > 0);
+  let meta = `${ALL.length} repos total — ${ALL.filter(r => r.hasPages).length} with pages — loaded ${new Date().toLocaleTimeString()}`;
+  if (notes.length) meta += ` — ${notes.join(" · ")}`;
+  if (errors.length) meta += ` — couldn't fetch: ${errors.join(" · ")}`;
+  metaEl.textContent = meta;
+  render();
+  updateCounts();
+  probeReadmes(); // fill in README status via CDN (not rate-limited)
 }
 
 function esc(s) {
@@ -209,8 +299,159 @@ function siteUrl(r) {
   return r.homepage || (r.hasPages ? `https://${r.owner}.github.io/${r.name}/` : null);
 }
 
+/* ---------- README presence, no api.github.com, no token ----------
+   jsDelivr's data API mirrors GitHub repos on their CDN — no 60/hr limit, full
+   CORS. One call lists the root files; a README shows up in that listing.
+   Some repos are too big for jsDelivr to enumerate (403) — for those we probe
+   raw.githubusercontent.com directly (also CDN-served, also no API limit).
+   Either way we record the exact filename + branch so the expander can fetch
+   the content. Results cached in localStorage for 7 days. */
+const README_LOWER = ["readme.md", "readme", "readme.markdown", "readme.txt", "readme.rst"];
+const README_RAW = ["readme.md", "README.md", "readme", "README", "readme.markdown", "README.markdown", "readme.txt", "README.txt", "readme.rst", "README.rst"];
+const BRANCHES = ["master", "main"];
+
+async function probeOne(r) {
+  const k = r.owner + "/" + r.name;
+  for (const b of BRANCHES) {
+    let res;
+    try {
+      res = await fetch(`https://data.jsdelivr.com/v1/packages/gh/${k}@${b}?structure=flat`);
+    } catch (e) { return null; } // network hiccup — retried next visit
+    if (!res.ok) continue;       // branch not on the CDN (or repo too big for it)
+    const data = await res.json();
+    const hit = (data.files || []).find(f => README_LOWER.includes((f.name || "").replace(/^\//, "").toLowerCase()));
+    return { v: hit ? 1 : 0, f: hit ? hit.name.replace(/^\//, "") : null, b };
+  }
+  // jsDelivr couldn't enumerate the repo — probe raw files directly
+  for (const b of BRANCHES) {
+    for (const name of README_RAW) {
+      let res;
+      try {
+        res = await fetch(`https://raw.githubusercontent.com/${k}/${b}/${name}`);
+      } catch (e) { return null; } // network hiccup — retried next visit
+      if (res.status === 404) continue; // definitively not this filename
+      if (res.ok) return { v: 1, f: name, b };
+      return null;                       // unexpected status — retried next visit
+    }
+  }
+  return { v: 0, f: null, b: null };      // every candidate 404'd — genuinely no README
+}
+
+async function probeReadmes() {
+  const cutoff = Date.now() - RC_TTL;
+  const unknown = ALL.filter(r => {
+    const k = r.owner + "/" + r.name;
+    return !readmeCache[k] || readmeCache[k].t < cutoff;
+  });
+  if (!unknown.length) { updateCounts(); return; }
+
+  let done = 0;
+  async function worker() {
+    while (done < unknown.length) {
+      const r = unknown[done++];
+      const k = r.owner + "/" + r.name;
+      const p = await probeOne(r);
+      if (p === null) continue; // couldn't tell — retried next visit
+      readmeCache[k] = { ...p, t: Date.now() };
+      saveReadmeCache();
+      updateChecks(r);
+      updateCounts();
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  updateCounts();
+}
+
+function updateChecks(r) {
+  const el = rootEl.querySelector(`.card[data-owner="${CSS.escape(r.owner)}"][data-name="${CSS.escape(r.name)}"]`);
+  if (!el) return;
+  const c = readmeCache[r.owner + "/" + r.name];
+  const box = el.querySelector(".chk.readme");
+  if (!c) return; // still unknown — badge already shows "README…"
+  if (box) {
+    box.className = "chk readme " + (c.v ? "ok" : "miss");
+    box.textContent = c.v ? "README ✓" : "NO README ✗";
+  }
+  if (c.v && !el.querySelector(".readme-toggle")) addReadmeBits(el, r);
+}
+
+/* ---------- README expand (click-to-read) ---------- */
+const readmeBodies = new Map(); // "owner/repo" -> { text, f, b } — in-memory, this visit only
+
+function addReadmeBits(el, r) {
+  const btn = document.createElement("button");
+  btn.className = "abtn readme-toggle";
+  btn.innerHTML = `README ▾<span class="kbd">M</span>`;
+  btn.addEventListener("click", () => toggleReadme(r, el, btn));
+  const actions = el.querySelector(".card-actions");
+  const repoBtn = [...actions.querySelectorAll("a.abtn")].pop(); // REPO is the last one
+  actions.insertBefore(btn, repoBtn);
+
+  const view = document.createElement("div");
+  view.className = "readme-view";
+  view.innerHTML = `<div class="readme-head"></div><pre class="readme-body"></pre>`;
+  el.insertBefore(view, el.querySelector(".preview") || null);
+}
+
+async function toggleReadme(r, el, btn) {
+  const view = el.querySelector(".readme-view");
+  const opening = view.classList.toggle("open");
+  btn.innerHTML = opening ? `README ▴<span class="kbd">M</span>` : `README ▾<span class="kbd">M</span>`;
+  if (!opening) return;
+
+  const k = r.owner + "/" + r.name;
+  const pre = view.querySelector(".readme-body");
+  pre.textContent = "loading…";
+  let body = readmeBodies.get(k);
+  if (!body) {
+    body = await fetchReadmeBody(k);
+    if (body) readmeBodies.set(k, body);
+  }
+  if (!body) {
+    pre.textContent = "couldn't load the readme — close and reopen to retry";
+    return;
+  }
+  const head = view.querySelector(".readme-head");
+  const lines = body.text.split("\n").length;
+  const kb = (new Blob([body.text]).size / 1024).toFixed(1);
+  head.innerHTML = `<b>${esc(body.f)}</b> · ${lines} lines · ${kb} KB · raw markdown — <a href="https://github.com/${esc(k)}/blob/${esc(body.b)}/${esc(body.f)}" target="_blank">view on GitHub ↗</a>`;
+  pre.textContent = body.text;
+}
+
+async function fetchReadmeBody(k) {
+  const c = readmeCache[k];
+  if (!c || !c.v || !c.f || !c.b) return null;
+  try {
+    const res = await fetch(`https://raw.githubusercontent.com/${k}/${c.b}/${encodeURIComponent(c.f)}`);
+    if (!res.ok) return null;
+    return { text: await res.text(), f: c.f, b: c.b };
+  } catch (e) { return null; }
+}
+
+/* ---------- combined counts on the filter buttons ---------- */
+const FILTER_LABELS = {
+  all: "ALL", razodin137: "RAZODIN137", "mvvk-space": "MVVK-SPACE",
+  pages: "PAGES", nopages: "NO PAGES", nohome: "NO HOMEPAGE", noreadme: "NO README"
+};
+function updateCounts() {
+  document.querySelectorAll(".fbtn").forEach(b => {
+    const f = b.dataset.f;
+    let n;
+    if (!ALL.length) n = "…";
+    else if (f === "all") n = ALL.length;
+    else if (OWNERS.includes(f)) n = ALL.filter(r => r.owner === f).length;
+    else if (f === "pages") n = ALL.filter(r => r.hasPages).length;
+    else if (f === "nopages") n = ALL.filter(r => !r.hasPages).length;
+    else if (f === "nohome") n = ALL.filter(r => !r.homepage).length;
+    else if (f === "noreadme") n = ALL.filter(r => readmeCache[r.owner + "/" + r.name]?.v === 0).length;
+    else n = "?";
+    b.textContent = `${FILTER_LABELS[f]} (${n})`;
+  });
+}
+
 function card(r) {
   const site = siteUrl(r);
+  const c = readmeCache[r.owner + "/" + r.name];
   const updated = new Date(r.pushed).toISOString().slice(0, 10);
   const el = document.createElement("div");
   el.className = "card";
@@ -224,15 +465,25 @@ function card(r) {
       ${r.hasPages ? '<span class="badge">PAGES ✓</span>' : ""}
     </div>
     <div class="desc ${r.desc ? "" : "none"}">${r.desc ? esc(r.desc) : "// no description set"}</div>
+    <div class="checks">
+      <span class="chk ${r.hasPages ? "ok" : "miss"} pages">${r.hasPages ? "PAGES ✓" : "NO PAGES ✗"}</span>
+      <span class="chk ${r.homepage ? "ok" : "miss"} home">${r.homepage ? "HOMEPAGE ✓" : "NO HOMEPAGE ✗"}</span>
+      <span class="chk readme ${c ? (c.v ? "ok" : "miss") : "pending"}">${c ? (c.v ? "README ✓" : "NO README ✗") : "README…"}</span>
+    </div>
     <div class="meta">owner: <b>${esc(r.owner)}</b> · updated: <b>${updated}</b>${r.lang ? " · lang: <b>" + esc(r.lang) + "</b>" : ""}${r.fork ? " · fork" : ""}</div>
     <div class="card-actions">
       ${site ? `<a class="abtn site" href="${esc(site)}" target="_blank">OPEN SITE ↗<span class="kbd">O</span></a>
                 <button class="abtn prev-toggle">PREVIEW ▾<span class="kbd">P</span></button>` : ""}
+      ${c?.v ? `<button class="abtn readme-toggle">README ▾<span class="kbd">M</span></button>` : ""}
       <a class="abtn" href="${esc(r.url)}" target="_blank">REPO ↗<span class="kbd">R</span></a>
     </div>
     ${site ? `<div class="preview">
-                <iframe loading="lazy" sandbox="allow-scripts allow-same-origin allow-forms" title="preview of ${esc(r.name)}"></iframe>
+                <iframe loading="lazy" sandbox="allow-scripts allow-forms" title="preview of ${esc(r.name)}"></iframe>
                 <div class="preview-note">inline preview — some sites block embedding; if blank, use OPEN SITE</div>
+              </div>` : ""}
+    ${c?.v ? `<div class="readme-view">
+                <div class="readme-head"></div>
+                <pre class="readme-body"></pre>
               </div>` : ""}
   `;
 
@@ -242,13 +493,15 @@ function card(r) {
     const frame = el.querySelector("iframe");
     toggle.addEventListener("click", () => {
       const open = box.classList.toggle("open");
-      toggle.textContent = open ? "PREVIEW ▴" : "PREVIEW ▾";
+      toggle.innerHTML = open ? `PREVIEW ▴<span class="kbd">P</span>` : `PREVIEW ▾<span class="kbd">P</span>`;
       if (open && !frame.dataset.loaded) {
         frame.src = site;
         frame.dataset.loaded = "1";
       }
     });
   }
+  const rbtn = el.querySelector(".readme-toggle");
+  if (rbtn) rbtn.addEventListener("click", () => toggleReadme(r, el, rbtn));
   return el;
 }
 
@@ -262,16 +515,20 @@ function render() {
   const sections = OWNERS.map(owner => {
     let repos = ALL.filter(r => r.owner === owner);
     if (filter === "pages") repos = repos.filter(r => r.hasPages);
-    if (filter !== "all" && filter !== "pages" && filter !== owner) return [owner, []];
+    if (filter === "nopages") repos = repos.filter(r => !r.hasPages);
+    if (filter === "nohome") repos = repos.filter(r => !r.homepage);
+    if (filter === "noreadme") repos = repos.filter(r => readmeCache[r.owner + "/" + r.name]?.v === 0);
+    if (filter !== "all" && filter !== "pages" && filter !== "nopages" && filter !== "nohome" && filter !== "noreadme" && filter !== owner) return [owner, []];
     if (q) repos = repos.filter(r => (r.name + " " + (r.desc || "")).toLowerCase().includes(q));
-    repos.sort((a, b) => new Date(b.pushed) - new Date(a.pushed));
+    // newest projects first (order they came in)
+    repos.sort((a, b) => new Date(b.created) - new Date(a.created));
     return [owner, repos];
   });
 
   let shown = 0;
   for (const [owner, repos] of sections) {
-    if ((filter === "pages" || filter === "all") && !q && repos.length === 0) continue;
-    if (filter !== "all" && filter !== "pages" && filter !== owner) continue;
+    if ((filter === "pages" || filter === "all" || filter === "nopages" || filter === "nohome" || filter === "noreadme") && !q && repos.length === 0) continue;
+    if (filter !== "all" && filter !== "pages" && filter !== "nopages" && filter !== "nohome" && filter !== "noreadme" && filter !== owner) continue;
 
     const h2 = document.createElement("h2");
     h2.innerHTML = `${owner} <span class="count">${repos.length}</span><span class="rule"></span>`;
@@ -336,6 +593,9 @@ function actOn(action) {
   } else if (action === "p") {
     const t = c.querySelector(".prev-toggle");
     if (t) t.click();
+  } else if (action === "m") {
+    const t = c.querySelector(".readme-toggle");
+    if (t) t.click();
   }
 }
 
@@ -359,6 +619,7 @@ document.addEventListener("keydown", e => {
     case "k": case "arrowup": e.preventDefault(); move(-1); break;
     case "o": e.preventDefault(); actOn("o"); break;
     case "p": e.preventDefault(); actOn("p"); break;
+    case "m": e.preventDefault(); actOn("m"); break;
     case "r": e.preventDefault(); actOn("r"); break;
     case "/": e.preventDefault(); $("#search").focus(); break;
   }
@@ -367,6 +628,7 @@ document.addEventListener("keydown", e => {
 const _render = render;
 render = function() { _render(); sel = 0; markSelection(); };
 
+updateCounts(); // buttons show "…" until data lands
 load();
 </script>
 </body>
