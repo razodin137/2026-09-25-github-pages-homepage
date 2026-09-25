@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REPOS INDEX — razodin137 + mvvk-space</title>
+<style>
+  :root {
+    --ink: #111;
+    --paper: #f7f5ee;
+    --accent: #d94f30;
+    --blue: #2b5bd7;
+    --shadow: 5px 5px 0 var(--ink);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Courier New", Courier, monospace;
+    background: var(--paper);
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(17,17,17,.045) 31px, rgba(17,17,17,.045) 32px);
+    color: var(--ink);
+    padding: 2rem 1rem 4rem;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+
+  /* ---------- header ---------- */
+  header { border: 3px solid var(--ink); box-shadow: var(--shadow); background: #fff; padding: 1.5rem; margin-bottom: 1.5rem; position: relative; }
+  h1 { font-size: 1.6rem; letter-spacing: .08em; text-transform: uppercase; }
+  h1 .accent { color: var(--accent); }
+  .sub { font-size: .8rem; margin-top: .3rem; }
+  .stamp {
+    position: absolute; top: -14px; right: 14px; transform: rotate(3deg);
+    border: 2px solid var(--accent); color: var(--accent); background: #fff;
+    padding: 2px 10px; font-size: .7rem; font-weight: bold; letter-spacing: .15em;
+  }
+  #meta { font-size: .7rem; margin-top: 1rem; border-top: 2px dashed var(--ink); padding-top: .6rem; color: #444; }
+  #meta.err { color: var(--accent); font-weight: bold; }
+
+  /* ---------- controls ---------- */
+  .controls {
+    display: flex; gap: .75rem; flex-wrap: wrap; align-items: stretch;
+    border: 3px solid var(--ink); box-shadow: var(--shadow); background: #fff; padding: .75rem; margin-bottom: 2rem;
+  }
+  #search {
+    flex: 1; min-width: 220px; border: 2px solid var(--ink); padding: .55rem .7rem;
+    font-family: inherit; font-size: .85rem; background: var(--paper);
+  }
+  #search:focus { outline: 3px solid var(--blue); outline-offset: 1px; }
+  .fbtn {
+    border: 2px solid var(--ink); background: #fff; padding: .5rem .8rem;
+    font-family: inherit; font-size: .75rem; font-weight: bold; cursor: pointer;
+    letter-spacing: .05em; box-shadow: 3px 3px 0 var(--ink); transition: all .05s;
+  }
+  .fbtn:hover { background: var(--ink); color: #fff; }
+  .fbtn:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--ink); }
+  .fbtn.on { background: var(--ink); color: #fff; }
+
+  /* ---------- sections ---------- */
+  h2 {
+    display: flex; align-items: baseline; gap: .6rem;
+    font-size: 1.05rem; text-transform: uppercase; letter-spacing: .06em;
+    margin: 2.2rem 0 1rem;
+  }
+  h2 .count { font-size: .75rem; border: 2px solid var(--ink); padding: 0 .45rem; background: #fff; }
+  h2 .rule { flex: 1; border-bottom: 3px solid var(--ink); }
+
+  /* ---------- cards ---------- */
+  .card {
+    border: 3px solid var(--ink); box-shadow: var(--shadow); background: #fff;
+    padding: 1rem 1.1rem; margin-bottom: 1.1rem; transition: transform .05s;
+  }
+  .card:hover { transform: translate(-2px,-2px); box-shadow: 7px 7px 0 var(--ink); }
+  .card-top { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+  .name { font-size: 1rem; font-weight: bold; text-decoration: none; color: var(--ink); word-break: break-all; }
+  .name:hover { text-decoration: underline; text-decoration-thickness: 3px; }
+  .name:hover::after { content: " ↗"; color: var(--accent); }
+  .desc { font-size: .82rem; margin-top: .35rem; max-width: 56ch; }
+  .desc.none { color: #999; font-style: italic; }
+  .meta { font-size: .68rem; color: #555; margin-top: .5rem; letter-spacing: .03em; }
+  .meta b { color: var(--ink); }
+  .card-actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .8rem; }
+  .abtn {
+    display: inline-block; border: 2px solid var(--ink); padding: .4rem .75rem;
+    font-size: .72rem; font-weight: bold; text-decoration: none; color: var(--ink);
+    background: var(--paper); letter-spacing: .05em; cursor: pointer; font-family: inherit;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+  .abtn:hover { background: var(--ink); color: #fff; }
+  .abtn:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--ink); }
+  .abtn.site { background: var(--accent); color: #fff; border-color: var(--ink); }
+  .abtn.site:hover { background: var(--ink); }
+  .badge {
+    font-size: .62rem; font-weight: bold; letter-spacing: .12em;
+    border: 2px solid var(--blue); color: var(--blue); padding: 1px 7px; background: #fff;
+    transform: rotate(-2deg);
+  }
+
+  /* ---------- keyboard ---------- */
+  .keys { display: flex; gap: 1.4rem; flex-wrap: wrap; font-size: .7rem; color: #555; margin: -1.2rem 0 1.8rem; padding: 0 .25rem; }
+  .kbd {
+    display: inline-block; border: 2px solid var(--ink); background: #fff;
+    padding: 0 .38em; font-weight: bold; font-size: .64rem; line-height: 1.4;
+    box-shadow: 2px 2px 0 var(--ink); color: var(--ink);
+  }
+  .abtn .kbd { margin-left: .45em; background: var(--paper); }
+  .abtn:hover .kbd { background: #fff; color: var(--ink); }
+  .card.sel { outline: 4px solid var(--blue); outline-offset: 3px; background: #fffbcc; }
+  .card.sel .name::before { content: "▸ "; color: var(--blue); }
+  .preview { margin-top: .9rem; display: none; }
+  .preview.open { display: block; }
+  .preview iframe { width: 100%; height: 420px; border: 2px dashed var(--ink); background: #fff; }
+  .preview-note { font-size: .65rem; color: #777; margin-top: .3rem; }
+
+  .empty { border: 3px dashed var(--ink); padding: 2rem; text-align: center; font-size: .85rem; margin: 1.5rem 0; }
+  footer { margin-top: 3rem; font-size: .68rem; color: #666; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="stamp">LIVE DATA</div>
+    <h1>REPOS <span class="accent">INDEX</span></h1>
+    <div class="sub">every repo — razodin137 + mvvk-space — with its published pages site. fetched fresh from the GitHub API on every load. no babysitting.</div>
+    <div id="meta">fetching…</div>
+  </header>
+
+  <div class="controls">
+    <input id="search" type="text" placeholder="filter repos… (name or description)" autocomplete="off">
+    <button class="fbtn on" data-f="all">ALL</button>
+    <button class="fbtn" data-f="razodin137">RAZODIN137</button>
+    <button class="fbtn" data-f="mvvk-space">MVVK-SPACE</button>
+      <button class="fbtn" data-f="pages">HAS PAGES</button>
+  </div>
+
+  <div class="keys">
+    <span><span class="kbd">J</span>/<span class="kbd">K</span> or <span class="kbd">↓</span>/<span class="kbd">↑</span> or click to select</span>
+    <span><span class="kbd">O</span> open site</span>
+    <span><span class="kbd">P</span> preview</span>
+    <span><span class="kbd">R</span> repo</span>
+    <span><span class="kbd">/</span> search</span>
+  </div>
+
+  <div id="root"></div>
+
+  <footer>data: api.github.com — queried client-side, unauthenticated (60 req/hr, 2 used per visit)</footer>
+</div>
+
+<script>
+const OWNERS = ["razodin137", "mvvk-space"];
+let ALL = [];
+
+const $ = s => document.querySelector(s);
+const metaEl = $("#meta");
+const rootEl = $("#root");
+
+async function fetchRepos(owner) {
+  const out = [];
+  let page = 1;
+  while (true) {
+    const res = await fetch(`https://api.github.com/users/${owner}/repos?per_page=100&sort=pushed&page=${page}`, { cache: "no-store" });
+    if (res.status === 403 || res.status === 429) {
+      const reset = new Date(Number(res.headers.get("x-ratelimit-reset")) * 1000);
+      throw new Error(`GitHub API rate limit hit. resets at ${reset.toLocaleTimeString()}. just wait a minute and reload.`);
+    }
+    if (!res.ok) throw new Error(`API error ${res.status} for ${owner}`);
+    const batch = await res.json();
+    out.push(...batch);
+    if (batch.length < 100) break;
+    page++;
+  }
+  return out;
+}
+
+async function load() {
+  try {
+    const lists = await Promise.all(OWNERS.map(fetchRepos));
+    ALL = lists.flatMap((repos, i) =>
+      repos.map(r => ({
+        owner: r.owner.login,
+        name: r.name,
+        desc: r.description,
+        homepage: r.homepage && r.homepage.trim() ? r.homepage.trim() : null,
+        hasPages: r.has_pages,
+        url: r.html_url,
+        lang: r.language,
+        pushed: r.pushed_at,
+        fork: r.fork
+      }))
+    );
+    metaEl.classList.remove("err");
+    metaEl.textContent = `${ALL.length} repos total — ${ALL.filter(r => r.hasPages).length} with pages — loaded ${new Date().toLocaleTimeString()}`;
+    render();
+  } catch (e) {
+    metaEl.classList.add("err");
+    metaEl.textContent = "ERROR: " + e.message;
+    rootEl.innerHTML = `<div class="empty">couldn't reach the GitHub API. try reloading.</div>`;
+  }
+}
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s ?? "";
+  return d.innerHTML;
+}
+
+function siteUrl(r) {
+  return r.homepage || (r.hasPages ? `https://${r.owner}.github.io/${r.name}/` : null);
+}
+
+function card(r) {
+  const site = siteUrl(r);
+  const updated = new Date(r.pushed).toISOString().slice(0, 10);
+  const el = document.createElement("div");
+  el.className = "card";
+  el.dataset.owner = r.owner;
+  el.dataset.name = r.name;
+  el.dataset.text = (r.name + " " + (r.desc || "")).toLowerCase();
+
+  el.innerHTML = `
+    <div class="card-top">
+      <a class="name" href="${esc(r.url)}" target="_blank">${esc(r.name)}</a>
+      ${r.hasPages ? '<span class="badge">PAGES ✓</span>' : ""}
+    </div>
+    <div class="desc ${r.desc ? "" : "none"}">${r.desc ? esc(r.desc) : "// no description set"}</div>
+    <div class="meta">owner: <b>${esc(r.owner)}</b> · updated: <b>${updated}</b>${r.lang ? " · lang: <b>" + esc(r.lang) + "</b>" : ""}${r.fork ? " · fork" : ""}</div>
+    <div class="card-actions">
+      ${site ? `<a class="abtn site" href="${esc(site)}" target="_blank">OPEN SITE ↗<span class="kbd">O</span></a>
+                <button class="abtn prev-toggle">PREVIEW ▾<span class="kbd">P</span></button>` : ""}
+      <a class="abtn" href="${esc(r.url)}" target="_blank">REPO ↗<span class="kbd">R</span></a>
+    </div>
+    ${site ? `<div class="preview">
+                <iframe loading="lazy" sandbox="allow-scripts allow-same-origin allow-forms" title="preview of ${esc(r.name)}"></iframe>
+                <div class="preview-note">inline preview — some sites block embedding; if blank, use OPEN SITE</div>
+              </div>` : ""}
+  `;
+
+  const toggle = el.querySelector(".prev-toggle");
+  if (toggle) {
+    const box = el.querySelector(".preview");
+    const frame = el.querySelector("iframe");
+    toggle.addEventListener("click", () => {
+      const open = box.classList.toggle("open");
+      toggle.textContent = open ? "PREVIEW ▴" : "PREVIEW ▾";
+      if (open && !frame.dataset.loaded) {
+        frame.src = site;
+        frame.dataset.loaded = "1";
+      }
+    });
+  }
+  return el;
+}
+
+let filter = "all";
+let query = "";
+
+function render() {
+  const frag = document.createDocumentFragment();
+  const q = query.trim().toLowerCase();
+
+  const sections = OWNERS.map(owner => {
+    let repos = ALL.filter(r => r.owner === owner);
+    if (filter === "pages") repos = repos.filter(r => r.hasPages);
+    if (filter !== "all" && filter !== "pages" && filter !== owner) return [owner, []];
+    if (q) repos = repos.filter(r => (r.name + " " + (r.desc || "")).toLowerCase().includes(q));
+    repos.sort((a, b) => new Date(b.pushed) - new Date(a.pushed));
+    return [owner, repos];
+  });
+
+  let shown = 0;
+  for (const [owner, repos] of sections) {
+    if ((filter === "pages" || filter === "all") && !q && repos.length === 0) continue;
+    if (filter !== "all" && filter !== "pages" && filter !== owner) continue;
+
+    const h2 = document.createElement("h2");
+    h2.innerHTML = `${owner} <span class="count">${repos.length}</span><span class="rule"></span>`;
+    frag.appendChild(h2);
+
+    if (repos.length === 0) {
+      const e = document.createElement("div");
+      e.className = "empty";
+      e.textContent = "nothing matches the current filter";
+      frag.appendChild(e);
+    } else {
+      for (const r of repos) { frag.appendChild(card(r)); shown++; }
+    }
+  }
+
+  if (shown === 0 && !frag.childNodes.length) {
+    rootEl.innerHTML = `<div class="empty">nothing matches “${esc(query)}”</div>`;
+  } else {
+    rootEl.innerHTML = "";
+    rootEl.appendChild(frag);
+  }
+}
+
+$("#search").addEventListener("input", e => { query = e.target.value; render(); });
+document.querySelectorAll(".fbtn").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".fbtn").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    filter = b.dataset.f;
+    render();
+  });
+});
+
+/* ---------- keyboard navigation ---------- */
+let sel = 0; // index into currently rendered cards
+
+const cards = () => [...rootEl.querySelectorAll(".card")];
+
+function markSelection() {
+  const cs = cards();
+  if (!cs.length) return;
+  sel = Math.max(0, Math.min(sel, cs.length - 1));
+  cs.forEach((c, i) => c.classList.toggle("sel", i === sel));
+}
+
+function move(delta) {
+  const cs = cards();
+  if (!cs.length) return;
+  sel = Math.max(0, Math.min(sel + delta, cs.length - 1));
+  markSelection();
+  cs[sel].scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function actOn(action) {
+  const c = cards()[sel];
+  if (!c) return;
+  if (action === "r") {
+    window.open(c.querySelector(".name").href, "_blank");
+  } else if (action === "o") {
+    const a = c.querySelector(".abtn.site");
+    if (a) a.click(); else c.querySelector(".name").click();
+  } else if (action === "p") {
+    const t = c.querySelector(".prev-toggle");
+    if (t) t.click();
+  }
+}
+
+// clicking any card makes it the keyboard-selected one
+rootEl.addEventListener("mousedown", e => {
+  const c = e.target.closest(".card");
+  if (!c) return;
+  const idx = cards().indexOf(c);
+  if (idx >= 0 && idx !== sel) { sel = idx; markSelection(); }
+});
+
+document.addEventListener("keydown", e => {
+  // don't hijack typing in the search box (except Escape / Enter)
+  if (e.target === $("#search")) {
+    if (e.key === "Escape" || e.key === "Enter") { e.target.blur(); }
+    return;
+  }
+
+  switch (e.key.toLowerCase()) {
+    case "j": case "arrowdown": e.preventDefault(); move(1); break;
+    case "k": case "arrowup": e.preventDefault(); move(-1); break;
+    case "o": e.preventDefault(); actOn("o"); break;
+    case "p": e.preventDefault(); actOn("p"); break;
+    case "r": e.preventDefault(); actOn("r"); break;
+    case "/": e.preventDefault(); $("#search").focus(); break;
+  }
+});
+
+const _render = render;
+render = function() { _render(); sel = 0; markSelection(); };
+
+load();
+</script>
+</body>
+</html>
